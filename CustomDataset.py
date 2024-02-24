@@ -11,6 +11,7 @@ class CustomImageDataset(Dataset):
         self.transform = transform
         self.target_transform = target_transform
         self.to_pil = ToPILImage()
+        self.classes = len(self.img_labels['Label Index'].unique())
 
     def __len__(self):
         return len(self.img_labels)
@@ -39,9 +40,10 @@ if __name__ == '__main__':
 
     # Print the number of elements in the dataset
     print(f'Total images: {len(dataset)}')
+    print(f'Total classes: {dataset.classes}')
 
     # Define the batch size
-    batch_size = 32
+    batch_size = 8
 
     # Create a DataLoader instance
     dataloader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
