@@ -41,13 +41,13 @@ parser.add_argument(
 parser.add_argument(
     '--input-width',
     type=int,
-    default=640,
+    default=256,
     help='模型輸入寬度',
 )
 parser.add_argument(
     '--input-height',
     type=int,
-    default=480,
+    default=256,
     help='模型輸入高度',
 )
 parser.add_argument(
@@ -138,8 +138,8 @@ def main():
     custom_dataset = CustomImageDataset(annotations_file='train_data/annotations.csv', transform=transform)
 
     # Define the split ratios
-    train_ratio = 0.9
-    test_ratio = 0.1
+    train_ratio = 0.8
+    test_ratio = 0.2
 
     # Split the dataset indices into training and testing
     dataset_size = len(custom_dataset)
