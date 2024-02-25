@@ -2,6 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 from torchvision import transforms
+from torchvision.transforms import ToTensor, Lambda
 from torch.utils.data import DataLoader, SubsetRandomSampler
 from torchvision.models import vgg16, vgg19, resnet50, densenet121
 import argparse
@@ -23,7 +24,7 @@ parser.add_argument(
 parser.add_argument(
     '--model-type',
     choices=('VGG16', 'VGG19', 'ResNet50', 'DenseNet121', 'MobileNetV2', 'custom1', 'custom2'),
-    default='custom1',
+    default='ResNet50',
     help='選擇模型類別',
 )
 parser.add_argument(
@@ -75,6 +76,11 @@ def choose_model(model_type, class_count):
         model = AlexLikeNet(class_count)
     else:
         model = ResNet18LikeNet(class_count)
+    # Add softmax layer to the end of the model
+    model = nn.Sequential(
+        model,
+        nn.Softmax(dim=1)
+    )
     return model
 
 def train(dataloader, model, loss_fn, optimizer):
@@ -83,7 +89,6 @@ def train(dataloader, model, loss_fn, optimizer):
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
-
         # Compute prediction error
         pred = model(X)
         loss = loss_fn(pred, y)
@@ -111,7 +116,7 @@ def test(dataloader, model, loss_fn):
             X, y = X.to(device), y.to(device)
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+            correct += (pred.argmax(1) == y.argmax(1)).type(torch.float).sum().item()
     test_loss /= num_batches
     correct /= size
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
@@ -133,34 +138,23 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+    target_transform = Lambda(lambda y: torch.zeros(2, dtype=torch.float).scatter_(0, torch.tensor(y), value=1))
 
     # Create an instance of the CustomDataset
-    custom_dataset = CustomImageDataset(annotations_file='train_data/annotations.csv', transform=transform)
+    train_dataset = CustomImageDataset(annotations_file='train_data/annotations.csv', transform=transform, target_transform=target_transform)
+    test_dataset = CustomImageDataset(annotations_file='test_data/annotations.csv', transform=transform, target_transform=target_transform)
 
-    # Define the split ratios
-    train_ratio = 0.8
-    test_ratio = 0.2
-
-    # Split the dataset indices into training and testing
-    dataset_size = len(custom_dataset)
-    indices = list(range(dataset_size))
-    split = int(np.floor(test_ratio * dataset_size))
-    np.random.shuffle(indices)
-    train_indices, test_indices = indices[split:], indices[:split]
-
-    # Create samplers for training and testing sets
-    train_sampler = SubsetRandomSampler(train_indices)
-    test_sampler = SubsetRandomSampler(test_indices)
     # Create data loaders for training and testing sets using samplers
-    train_loader = DataLoader(custom_dataset, batch_size=batch_size, sampler=train_sampler)
-    test_loader = DataLoader(custom_dataset, batch_size=batch_size, sampler=test_sampler)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # Print the number of elements in the dataset
     print(f'Total batches for training: {len(train_loader)}')
     print(f'Total batches for testing: {len(test_loader)}')
 
     # Model selection
-    model = choose_model(args.model_type, class_count=custom_dataset.classes)
+    model = choose_model(args.model_type, class_count=train_dataset.classes)
+    print(model)
 
     # Define loss function and optimizer
     loss_fn = nn.CrossEntropyLoss()
