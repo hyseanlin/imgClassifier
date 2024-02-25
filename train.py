@@ -34,7 +34,7 @@ parser.add_argument(
 parser.add_argument(
     '--epochs',
     type=int,
-    default=32,
+    default=100,
     help='訓練回合數',
 )
 parser.add_argument(
@@ -126,6 +126,7 @@ def test(dataloader, model, loss_fn):
     test_loss /= num_batches
     correct /= size
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
+    return test_loss
 
 # Get cpu, gpu or mps device for training.
 device = (
@@ -168,14 +169,16 @@ def main():
     # optimizer = optim.Adam(model.parameters())
     optimizer = torch.optim.SGD(model.parameters(), lr=learning_rate)
 
+    best_val_loss = float('inf')
     for t in range(epochs):
         print(f"Epoch {t + 1}\n-------------------------------")
         train(train_loader, model, loss_fn, optimizer)
-        test(test_loader, model, loss_fn)
+        val_loss = test(test_loader, model, loss_fn)
+        if val_loss < best_val_loss:
+            print(f"New best model found! Saving model with validation loss {val_loss}")
+            torch.save(model.state_dict(), f'{args.weights_file}_{t + 1}.pth')
+            best_val_loss = val_loss
     print("Done!")
-
-    # Save the model
-    torch.save(model.state_dict(), args.weights_file)
 
 if __name__ == '__main__':
     main()
