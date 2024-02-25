@@ -75,6 +75,11 @@ def choose_model(model_type, class_count):
         model = AlexLikeNet(class_count)
     else:
         model = ResNet18LikeNet(class_count)
+    # Add softmax layer
+    model = nn.Sequential(
+        model,
+        nn.Softmax(dim=1)
+    )
     return model
 
 def train(dataloader, model, loss_fn, optimizer):
@@ -111,7 +116,7 @@ def test(dataloader, model, loss_fn):
             X, y = X.to(device), y.to(device)
             pred = model(X)
             test_loss += loss_fn(pred, y).item()
-            correct += (pred.argmax(1) == y).type(torch.float).sum().item()
+            correct += (pred.argmax(1) == y.argmax(1)).type(torch.float).sum().item()
     test_loss /= num_batches
     correct /= size
     print(f"Test Error: \n Accuracy: {(100*correct):>0.1f}%, Avg loss: {test_loss:>8f} \n")
@@ -133,9 +138,10 @@ def main():
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
+    target_transform = transforms.Lambda(lambda y: torch.zeros(2, dtype=torch.float).scatter_(0, torch.tensor(y), value=1))
 
     # Create an instance of the CustomDataset
-    custom_dataset = CustomImageDataset(annotations_file='train_data/annotations.csv', transform=transform)
+    custom_dataset = CustomImageDataset(annotations_file='train_data/annotations.csv', transform=transform, target_transform=target_transform)
 
     # Define the split ratios
     train_ratio = 0.8
