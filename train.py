@@ -1,8 +1,7 @@
 import torch
 import torch.nn as nn
-import torch.optim as optim
 from torchvision import transforms
-from torch.utils.data import DataLoader, SubsetRandomSampler
+from torch.utils.data import DataLoader
 from torchvision.models import vgg16, vgg19, resnet50, densenet121
 import argparse
 from AlexLikeNet import AlexLikeNet
@@ -15,15 +14,21 @@ parser = argparse.ArgumentParser(description="A simple command-line program")
 
 # Add the arguments
 parser.add_argument(
-    '--data-dir',
+    '--train-dir',
     # required=True,
     help='訓練資料目錄',
-    default='data',
+    default='train_data',
+)
+parser.add_argument(
+    '--test-dir',
+    # required=True,
+    help='訓練資料目錄',
+    default='test_data',
 )
 parser.add_argument(
     '--model-type',
     choices=('VGG16', 'VGG19', 'ResNet50', 'DenseNet121', 'MobileNetV2', 'custom1', 'custom2'),
-    default='custom1',
+    default='custom2',
     help='選擇模型類別',
 )
 parser.add_argument(
@@ -58,6 +63,8 @@ parser.add_argument(
 )
 # Parse the arguments
 args = parser.parse_args()
+train_dir = args.train_dir
+test_dir = args.test_dir
 batch_size = args.batch_size
 epochs = args.epochs
 learning_rate = 1e-3
@@ -75,7 +82,7 @@ def choose_model(model_type, class_count):
         model = AlexLikeNet(class_count)
     else:
         model = ResNet18LikeNet(class_count)
-    # Add softmax layer
+    # Add softmax layer to the end of the model
     model = nn.Sequential(
         model,
         nn.Softmax(dim=1)
@@ -88,7 +95,6 @@ def train(dataloader, model, loss_fn, optimizer):
     model.train()
     for batch, (X, y) in enumerate(dataloader):
         X, y = X.to(device), y.to(device)
-
         # Compute prediction error
         pred = model(X)
         loss = loss_fn(pred, y)
@@ -132,41 +138,30 @@ device = (
 print(f"Using {device} device")
 
 def main():
+    num_classes = 2
     # Data loading and preprocessing
     transform = transforms.Compose([
         transforms.Resize((args.input_height, args.input_width)),
         transforms.ToTensor(),
         transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
     ])
-    target_transform = transforms.Lambda(lambda y: torch.zeros(2, dtype=torch.float).scatter_(0, torch.tensor(y), value=1))
+    target_transform = transforms.Lambda(lambda y: torch.zeros(num_classes, dtype=torch.float).scatter_(0, torch.tensor(y), value=1))
 
     # Create an instance of the CustomDataset
-    custom_dataset = CustomImageDataset(annotations_file='train_data/annotations.csv', transform=transform, target_transform=target_transform)
+    train_dataset = CustomImageDataset(annotations_file=f'{train_dir}/annotations.csv', transform=transform, target_transform=target_transform)
+    test_dataset = CustomImageDataset(annotations_file=f'{test_dir}/annotations.csv', transform=transform, target_transform=target_transform)
 
-    # Define the split ratios
-    train_ratio = 0.8
-    test_ratio = 0.2
-
-    # Split the dataset indices into training and testing
-    dataset_size = len(custom_dataset)
-    indices = list(range(dataset_size))
-    split = int(np.floor(test_ratio * dataset_size))
-    np.random.shuffle(indices)
-    train_indices, test_indices = indices[split:], indices[:split]
-
-    # Create samplers for training and testing sets
-    train_sampler = SubsetRandomSampler(train_indices)
-    test_sampler = SubsetRandomSampler(test_indices)
     # Create data loaders for training and testing sets using samplers
-    train_loader = DataLoader(custom_dataset, batch_size=batch_size, sampler=train_sampler)
-    test_loader = DataLoader(custom_dataset, batch_size=batch_size, sampler=test_sampler)
+    train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
+    test_loader = DataLoader(test_dataset, batch_size=batch_size, shuffle=True)
 
     # Print the number of elements in the dataset
     print(f'Total batches for training: {len(train_loader)}')
     print(f'Total batches for testing: {len(test_loader)}')
 
     # Model selection
-    model = choose_model(args.model_type, class_count=custom_dataset.classes)
+    model = choose_model(args.model_type, class_count=train_dataset.classes)
+    print(model)
 
     # Define loss function and optimizer
     loss_fn = nn.CrossEntropyLoss()
